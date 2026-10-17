@@ -1,0 +1,30 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV TZ=America/Guayaquil \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tzdata \
+    && ln -sf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/*
+
+# Se instala el lock (versiones exactas, directas y transitivas): la imagen lleva lo mismo
+# que se probó. requirements.txt solo lista las dependencias directas.
+COPY requirements.lock.txt .
+RUN pip install --no-cache-dir -r requirements.lock.txt
+
+COPY . .
+
+# Sin privilegios: un fallo en la app no da root dentro del contenedor.
+RUN useradd --system --no-create-home --uid 10001 qhub
+USER qhub
+
+EXPOSE 8000
+
+# WEB_CONCURRENCY=N levanta N procesos (uvicorn lo lee solo). Es seguro: los eventos y avisos
+# se difunden entre procesos por RabbitMQ, no por memoria compartida.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,32 @@
+services:
+  qhub:
+    build:
+      context: ./qhub-api
+      dockerfile: dockerfile
+    container_name: qhub
+    env_file:
+      - ./qhub-api/.env
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: always
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - qhub_net
+
+networks:
+  qhub_net:
+    driver: bridge
