@@ -352,6 +352,7 @@ def build_container(settings: Settings, resources: AppResources) -> RuntimeConta
         events,
         notifications,
         container.clock(),
+        enforce_ownership=settings.ENFORCE_TURN_OWNERSHIP,
     )
     sweeps = SweepUseCases(
         container.sweep_repository(),

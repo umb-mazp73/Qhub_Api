@@ -17,6 +17,10 @@ from app.domain.value_objects import PersonIdentity, TenantContext
 logger = logging.getLogger("qhub_api.application.turnos")
 
 
+# Roles que operan la fila y pueden ver cualquier turno de su cuenta; el resto (p. ej. "cliente") solo los propios.
+STAFF_ROLES = ("admin", "agente")
+
+
 def _require_agent(context: TenantContext) -> None:
     if context.rol != "agente":
         raise Forbidden("Requiere uno de estos roles: agente", "agente")
@@ -37,16 +41,32 @@ class TurnUseCases:
         events: TurnEventPublisher,
         notifications: NotificationRequester,
         clock: Clock,
+        enforce_ownership: bool = False,
     ) -> None:
         self._repository = repository
         self._queues = queues
         self._events = events
         self._notifications = notifications
         self._clock = clock
+        self._enforce_ownership = enforce_ownership
 
     async def _get(self, context: TenantContext, turn_id: UUID) -> Turno:
         turn = await self._repository.get(context.identity.owner, turn_id)
         if turn is None:
+            raise NotFound("Turno no encontrado", "turno")
+        return turn
+
+    def _is_foreign(self, context: TenantContext, turn: Turno) -> bool:
+        return (
+            self._enforce_ownership
+            and context.rol not in STAFF_ROLES
+            and turn.usuario_id != context.identity.usuario_id
+        )
+
+    async def _get_visible(self, context: TenantContext, turn_id: UUID) -> Turno:
+        """Como `_get`, pero con ownership activo el turno de otra persona es 404 (nunca 403, igual que un recurso ajeno)."""
+        turn = await self._get(context, turn_id)
+        if self._is_foreign(context, turn):
             raise NotFound("Turno no encontrado", "turno")
         return turn
 
@@ -67,7 +87,10 @@ class TurnUseCases:
     async def list(
         self, context: TenantContext, query: TurnQuery
     ) -> tuple[Turno, ...]:
-        return await self._repository.list(context.identity.owner, query)
+        turns = await self._repository.list(context.identity.owner, query)
+        if self._enforce_ownership and context.rol not in STAFF_ROLES:
+            return tuple(t for t in turns if t.usuario_id == context.identity.usuario_id)
+        return turns
 
     async def list_mine(
         self, context: TenantContext, page: Page = Page()
@@ -75,10 +98,10 @@ class TurnUseCases:
         return await self._repository.list_for_person(context.identity, page)
 
     async def get(self, context: TenantContext, turn_id: UUID) -> Turno:
-        return await self._get(context, turn_id)
+        return await self._get_visible(context, turn_id)
 
     async def postpone(self, context: TenantContext, turn_id: UUID) -> Turno:
-        turn = await self._get(context, turn_id)
+        turn = await self._get_visible(context, turn_id)
         _validate(turn, "posponer")
         last = await self._repository.last_waiting_position(
             context.identity.owner, turn
@@ -102,7 +125,7 @@ class TurnUseCases:
         return updated
 
     async def cancel(self, context: TenantContext, turn_id: UUID) -> Turno:
-        turn = await self._get(context, turn_id)
+        turn = await self._get_visible(context, turn_id)
         _validate(turn, "cancelar")
         updated = await self._repository.set_state(
             context.identity.owner, turn_id, TurnoEstado.CANCELADO

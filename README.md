@@ -309,6 +309,7 @@ Todo en un único `.env` (en `qhub-api/`). Sin `SUPABASE_*` o `JWT_SECRET_KEY` l
 | `WS_HEARTBEAT_INTERVAL` | Segundos entre pings (30) |
 | `RATE_LIMIT_REQUESTS_POR_MINUTO`, `RATE_LIMIT_AUTH_POR_MINUTO` | 300 por cuenta, 20 por IP en `/auth/*` (`0` desactiva) |
 | `CORS_ORIGINS` | Orígenes permitidos, separados por coma (`*` por defecto) |
+| `ENFORCE_TURN_OWNERSHIP` | `false` por defecto (comportamiento de siempre). Con `true`, quien no es `admin` ni `agente` solo ve, cancela o pospone **sus** turnos (según `X-Usuario-Id`); el ajeno responde `404` y `GET /turnos` solo devuelve los suyos. Recomendado cuando una app pública de personas usa la API. Pruebas: `python -m tests.test_turn_ownership` |
 | `APP_NAME`, `APP_ENV`, `DEBUG` | Con `APP_ENV=production` se avisan en el log las configuraciones débiles |
 | `WEB_CONCURRENCY` | Procesos por contenedor (uvicorn lo lee solo) |
 

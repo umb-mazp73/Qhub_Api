@@ -38,6 +38,10 @@ class Settings(EnvConfig):
     RATE_LIMIT_AUTH_POR_MINUTO: int = 20
     CORS_ORIGINS: str = "*"
 
+    # Si es true, quien no es admin ni agente solo ve, cancela o pospone SUS turnos (usuario_id de X-Usuario-Id);
+    # el ajeno responde 404. Apagado por defecto para no cambiar el comportamiento de los clientes existentes.
+    ENFORCE_TURN_OWNERSHIP: bool = False
+
     @field_validator("NOTIFICACIONES_MAX_INTENTOS")
     @classmethod
     def _max_intentos_positivo(cls, value: int) -> int:
