@@ -17,8 +17,8 @@ class Settings(EnvConfig):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTOS: int = 60
     ADMIN_API_KEY: str = ""
 
-    RESEND_API_KEY: str = ""
-    EMAIL_FROM: str = "onboarding@resend.dev"
+    BREVO_API_KEY: str = ""
+    EMAIL_FROM: str = ""
     PASSWORD_RESET_URL: str = "http://localhost:5173"
     PASSWORD_RESET_TTL_MINUTOS: int = 60
 

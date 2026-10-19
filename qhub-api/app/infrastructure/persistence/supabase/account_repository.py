@@ -1,7 +1,10 @@
 from datetime import datetime
 from uuid import UUID
 
+import logging
+
 from app.application.errors import PersistenceFailure
+from app.domain.email_lookup import email_query_for
 from app.domain.models import RegistrationDraft, RegistrationResult
 from app.domain.interfaces.accounts import AccountRepository
 from app.domain.enums import LIMITE_COLAS_POR_TIPO, PropietarioTipo
@@ -9,8 +12,11 @@ from app.domain.value_objects import (
     LoginRecord,
     OwnerId,
     PasswordResetRecord,
+    PersonIdentity,
     ResetTarget,
 )
+
+logger = logging.getLogger("qhub_api.persistence.accounts")
 from app.infrastructure.persistence.supabase.error_mapping import map_registration_error
 
 
@@ -54,6 +60,27 @@ class SupabaseAccountRepository(AccountRepository):
                     True,
                 )
         return None
+
+    async def email_for(self, identity: PersonIdentity) -> str | None:
+        """Resuelve el correo del destinatario de un aviso, o `None` si no hay uno.
+
+        La decisión de tabla/columnas vive en el helper puro `email_query_for`. Cualquier
+        error de la base se trata como `None`: el resolver nunca levanta hacia el canal."""
+        lookup = email_query_for(identity)
+        if lookup is None:
+            return None
+        table, filters = lookup
+        try:
+            query = self._client.table(table).select("email")
+            for column, value in filters.items():
+                query = query.eq(column, value)
+            result = await query.limit(1).execute()
+        except Exception:
+            logger.warning("No se pudo resolver el correo del destinatario")
+            return None
+        if not result.data:
+            return None
+        return result.data[0].get("email") or None
 
     async def find_owner_by_api_key_digest(self, digest: str) -> OwnerId | None:
         result = (

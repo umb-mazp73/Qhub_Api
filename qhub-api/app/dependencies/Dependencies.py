@@ -17,9 +17,10 @@ from app.application.use_cases.turnos import TurnUseCases
 from app.config.config import Settings
 from app.infrastructure.clock import SystemClock, UuidGenerator
 from app.infrastructure.messaging.rabbitmq.connection import RabbitConnectionManager
+from app.infrastructure.delivery.email_channel import EmailNotificationChannel
 from app.infrastructure.delivery.log_channel import LogNotificationChannel
 from app.infrastructure.delivery.log_email_sender import LogEmailSender
-from app.infrastructure.delivery.resend_email_sender import ResendEmailSender
+from app.infrastructure.delivery.brevo_email_sender import BrevoEmailSender
 from app.infrastructure.messaging.rabbitmq.event_worker import EventWorker, SubscribingQueueProvisioner
 from app.infrastructure.messaging.rabbitmq.fanout_worker import FanoutWorker
 from app.infrastructure.messaging.rabbitmq.notification_worker import NotificationWorker
@@ -82,7 +83,7 @@ class _SupabaseProviderProxy:
         return getattr(self._owner.require_client(), name)
 
 
-def _select_channels(settings: Settings, live_delivery) -> tuple[list, set[str]]:
+def _select_channels(settings: Settings, live_delivery, email_sender, accounts) -> tuple[list, set[str]]:
     """Parsea NOTIFICACIONES_CANALES preservando orden, dedup y el warning de canal
     desconocido. Aquí se engancha un canal real (push, email, SMS)."""
     channels: list = []
@@ -96,6 +97,15 @@ def _select_channels(settings: Settings, live_delivery) -> tuple[list, set[str]]
             channels.append(live_delivery)
         elif name == "log":
             channels.append(LogNotificationChannel())
+        elif name == "email":
+            # Solo se construye con una BREVO_API_KEY no vacía; sin ella se omite con un
+            # warning (habilitar "email" sin key NO debe romper el arranque).
+            if settings.BREVO_API_KEY.strip():
+                channels.append(EmailNotificationChannel(email_sender, accounts))
+            else:
+                logger.warning(
+                    "Canal 'email' habilitado sin BREVO_API_KEY: se omite el correo"
+                )
         else:
             logger.warning("Canal de notificación desconocido: %r", name)
     return channels, seen
@@ -144,9 +154,9 @@ class Dependencies(containers.DeclarativeContainer):
     clock: providers.Factory[SystemClock] = providers.Factory(SystemClock)
     ids: providers.Factory[UuidGenerator] = providers.Factory(UuidGenerator)
     api_keys: providers.Factory[ApiKeyCodec] = providers.Factory(ApiKeyCodec)
-    resend_email_sender: providers.Factory[ResendEmailSender] = providers.Factory(
-        ResendEmailSender,
-        settings.provided.RESEND_API_KEY,
+    brevo_email_sender: providers.Factory[BrevoEmailSender] = providers.Factory(
+        BrevoEmailSender,
+        settings.provided.BREVO_API_KEY,
         settings.provided.EMAIL_FROM,
     )
     log_email_sender: providers.Factory[LogEmailSender] = providers.Factory(LogEmailSender)
@@ -339,16 +349,19 @@ def build_container(settings: Settings, resources: AppResources) -> RuntimeConta
     jobs = container.jobs()
     live_delivery = container.live_delivery()
 
-    channels, seen = _select_channels(settings, live_delivery)
+    accounts = container.accounts()
+    email_sender = (
+        container.brevo_email_sender()
+        if settings.BREVO_API_KEY.strip()
+        else container.log_email_sender()
+    )
+
+    # El canal de correo reusa el BrevoEmailSender y el account repo (como resolver). El
+    # branch "email" solo se arma si hay BREVO_API_KEY, así que email_sender ahí es Brevo.
+    channels, seen = _select_channels(settings, live_delivery, email_sender, accounts)
 
     notification_repository = container.notification_repository()
     notification_persistence = container.notification_persistence()
-
-    email_sender = (
-        container.resend_email_sender()
-        if settings.RESEND_API_KEY.strip()
-        else container.log_email_sender()
-    )
     auth = container.auth(
         email_sender,
         settings.PASSWORD_RESET_URL,

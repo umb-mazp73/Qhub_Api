@@ -134,6 +134,14 @@ class TurnUseCases:
             context.identity.owner, turn.cola_id, turn.franja_inicio
         )
         await self._events.publish(QueueEvent("turno_cancelado", turn.cola_id, updated))
+        await self._notify(
+            RequestNotification(
+                PersonIdentity(updated.owner, updated.usuario_id),
+                f"Tu turno #{updated.numero} fue cancelado.",
+                updated.id,
+                "turno_cancelado",
+            )
+        )
         return updated
 
     async def attend(self, context: TenantContext, turn_id: UUID) -> Turno:

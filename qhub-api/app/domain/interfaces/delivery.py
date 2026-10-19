@@ -17,6 +17,15 @@ class NotificationDeliveryChannel(Protocol):
     async def deliver(self, notification: Notificacion, notice_type: str) -> None: ...
 
 
+class NotificationEmailResolver(Protocol):
+    """Resuelve el correo del destinatario de un aviso (o `None` si no hay uno).
+
+    Abstracción de la que depende EmailNotificationChannel; SupabaseAccountRepository la
+    satisface estructuralmente."""
+
+    async def email_for(self, identity: PersonIdentity) -> str | None: ...
+
+
 class LocalLiveNotificationDelivery(Protocol):
     async def deliver_local(self, notification: Notificacion, notice_type: str) -> int: ...
 
