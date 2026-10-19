@@ -1,0 +1,41 @@
+# Blueprint de Render para Qhub-api.
+#
+# Con este archivo en la raíz del repo, Render detecta la configuración solo: al crear un
+# "Blueprint" apuntando a este repositorio, arma el servicio con el Dockerfile correcto,
+# el directorio raíz correcto y el healthcheck, sin configurar nada a mano salvo los
+# secretos (los marcados con `sync: false`, que se cargan en el panel).
+#
+# Supabase y CloudAMQP son externos: NO se definen acá, viven en su propio servicio y se
+# referencian por URL en las variables de entorno.
+
+services:
+  - type: web
+    name: qhub-api
+    runtime: docker
+    plan: free
+    # El Dockerfile y el código viven en qhub-api/, no en la raíz del repo.
+    rootDir: qhub-api
+    dockerfilePath: ./dockerfile
+    # Render inyecta $PORT; el Dockerfile ya escucha en esa variable.
+    healthCheckPath: /
+    envVars:
+      # --- Secretos: se cargan en el panel de Render (NO viajan en el repo) ---
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY          # service_role key de Supabase
+        sync: false
+      - key: RABBITMQ_URL          # amqps://... de CloudAMQP
+        sync: false
+      - key: JWT_SECRET_KEY        # >=32 chars: python -c "import secrets;print(secrets.token_urlsafe(48))"
+        sync: false
+      - key: ADMIN_API_KEY         # >=32 chars, la que usás para /empresas
+        sync: false
+
+      # --- Config no secreta recomendada para producción ---
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      # Cuando tengas el dominio del front, reemplazá * por la lista real (coma-separada).
+      - key: CORS_ORIGINS
+        value: "*"

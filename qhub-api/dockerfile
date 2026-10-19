@@ -25,6 +25,9 @@ USER qhub
 
 EXPOSE 8000
 
+# El puerto se toma de $PORT si está definido (Render y otras PaaS lo inyectan), con 8000
+# como fallback para local/docker-compose. Forma shell (no exec) a propósito: la forma de
+# lista NO expande variables de entorno, así que $PORT llegaría literal.
 # WEB_CONCURRENCY=N levanta N procesos (uvicorn lo lee solo). Es seguro: los eventos y avisos
 # se difunden entre procesos por RabbitMQ, no por memoria compartida.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
