@@ -359,4 +359,4 @@ app/
 └── dependencies/    composición con dependency-injector: UN solo grafo para HTTP, WebSocket y workers
 ```
 
-Las rutas HTTP, los WebSockets y los workers comparten el mismo contenedor: **una conexión a Supabase y una a RabbitMQ por proceso**. El diseño completo está en [`CLAUDE.md`](CLAUDE.md).
+Las rutas HTTP, los WebSockets y los workers comparten el mismo contenedor: **una conexión a Supabase y una a RabbitMQ por proceso**. El diseño completo está en `../Qhub_Doc/Qhub/CLAUDE.md`.
