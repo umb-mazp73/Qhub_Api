@@ -1,7 +1,14 @@
+from datetime import datetime
 from typing import Protocol
+from uuid import UUID
 
 from app.domain.models import RegistrationDraft, RegistrationResult
-from app.domain.value_objects import LoginRecord, OwnerId
+from app.domain.value_objects import (
+    LoginRecord,
+    OwnerId,
+    PasswordResetRecord,
+    ResetTarget,
+)
 
 
 class AccountRepository(Protocol):
@@ -10,3 +17,17 @@ class AccountRepository(Protocol):
     async def find_owner_by_api_key_digest(self, digest: str) -> OwnerId | None: ...
     async def owner_is_active(self, owner: OwnerId) -> bool: ...
     async def register(self, draft: RegistrationDraft) -> RegistrationResult: ...
+    async def find_reset_target(self, email_norm: str) -> ResetTarget | None: ...
+    async def create_password_reset(
+        self, target: ResetTarget, token_hash: str, expira_en: datetime
+    ) -> None: ...
+    async def find_valid_reset(
+        self, token_hash: str, now: datetime
+    ) -> PasswordResetRecord | None: ...
+    async def mark_reset_used(self, reset_id: UUID, used_at: datetime) -> None: ...
+    async def update_password_hash(
+        self, owner: OwnerId, account_id: UUID, password_hash: str
+    ) -> None: ...
+    async def invalidate_resets_for_account(
+        self, owner: OwnerId, account_id: UUID, now: datetime
+    ) -> None: ...

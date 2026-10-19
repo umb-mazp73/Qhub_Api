@@ -42,6 +42,33 @@ class LoginRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class ResetTarget:
+    owner: OwnerId      # tipo + id "de dueño" (empresa_id para empresas, usuarios.id para usuarios)
+    account_id: UUID    # PK REAL de la fila de login: control_empresas.id (empresa) | usuarios.id (usuario)
+    email: str          # email (normalizado) de la fila de login
+
+
+@dataclass(frozen=True, slots=True)
+class PasswordResetRecord:
+    id: UUID
+    owner: OwnerId
+    account_id: UUID    # PK real de la fila de login (igual que ResetTarget.account_id)
+    email: str
+    expira_en: datetime
+    usado_en: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class EmailJob:
+    """Trabajo de correo diferido: lo devuelve request_password_reset y lo ejecuta el
+    BackgroundTask del router vía AuthUseCases.send_reset_email, fuera del camino de la
+    respuesta (ver nota anti-enumeración en el diseño)."""
+    to: str
+    subject: str
+    html: str
+
+
+@dataclass(frozen=True, slots=True)
 class Franja:
     inicio: datetime
     fin: datetime

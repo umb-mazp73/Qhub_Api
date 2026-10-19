@@ -70,3 +70,18 @@ class RegistroOut(BaseModel):
 class LoginCrear(BaseModel):
     identificador: str = Field(min_length=1, description="email o nombre_usuario")
     password: str = Field(min_length=1)
+
+
+class RecuperarCrear(BaseModel):
+    email: EmailStr
+
+
+class RestablecerCrear(BaseModel):
+    token: str = Field(min_length=1)
+    # max_length=72: alineado con bcrypt (trunca a 72 bytes) y con validatePassword del
+    # front, que rechaza >72. Un tope mayor dejaría pasar en la API lo que el front rechaza.
+    password: str = Field(min_length=8, max_length=72)
+
+
+class MensajeOut(BaseModel):
+    detail: str

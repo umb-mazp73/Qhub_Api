@@ -68,6 +68,17 @@ class LoginCommand:
 
 
 @dataclass(frozen=True, slots=True)
+class RequestPasswordReset:
+    email: str
+
+
+@dataclass(frozen=True, slots=True)
+class ResetPassword:
+    token: str
+    new_password: str
+
+
+@dataclass(frozen=True, slots=True)
 class CreateEmpresa:
     nombre: str
 

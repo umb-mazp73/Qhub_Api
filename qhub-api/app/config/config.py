@@ -17,6 +17,11 @@ class Settings(EnvConfig):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTOS: int = 60
     ADMIN_API_KEY: str = ""
 
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "onboarding@resend.dev"
+    PASSWORD_RESET_URL: str = "http://localhost:5173"
+    PASSWORD_RESET_TTL_MINUTOS: int = 60
+
     RABBITMQ_URL: str = ""
     RABBITMQ_EXCHANGE: str = "qhub.eventos"
     RABBITMQ_DLX: str = "qhub.dlx"
@@ -47,6 +52,13 @@ class Settings(EnvConfig):
     def _max_intentos_positivo(cls, value: int) -> int:
         if value < 1:
             raise ValueError("NOTIFICACIONES_MAX_INTENTOS debe ser mayor o igual a 1")
+        return value
+
+    @field_validator("PASSWORD_RESET_TTL_MINUTOS")
+    @classmethod
+    def _ttl_positivo(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("PASSWORD_RESET_TTL_MINUTOS debe ser mayor o igual a 1")
         return value
 
     @field_validator("NOTIFICACIONES_REINTENTO_SEGUNDOS")

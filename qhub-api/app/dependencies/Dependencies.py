@@ -18,6 +18,8 @@ from app.config.config import Settings
 from app.infrastructure.clock import SystemClock, UuidGenerator
 from app.infrastructure.messaging.rabbitmq.connection import RabbitConnectionManager
 from app.infrastructure.delivery.log_channel import LogNotificationChannel
+from app.infrastructure.delivery.log_email_sender import LogEmailSender
+from app.infrastructure.delivery.resend_email_sender import ResendEmailSender
 from app.infrastructure.messaging.rabbitmq.event_worker import EventWorker, SubscribingQueueProvisioner
 from app.infrastructure.messaging.rabbitmq.fanout_worker import FanoutWorker
 from app.infrastructure.messaging.rabbitmq.notification_worker import NotificationWorker
@@ -142,6 +144,12 @@ class Dependencies(containers.DeclarativeContainer):
     clock: providers.Factory[SystemClock] = providers.Factory(SystemClock)
     ids: providers.Factory[UuidGenerator] = providers.Factory(UuidGenerator)
     api_keys: providers.Factory[ApiKeyCodec] = providers.Factory(ApiKeyCodec)
+    resend_email_sender: providers.Factory[ResendEmailSender] = providers.Factory(
+        ResendEmailSender,
+        settings.provided.RESEND_API_KEY,
+        settings.provided.EMAIL_FROM,
+    )
+    log_email_sender: providers.Factory[LogEmailSender] = providers.Factory(LogEmailSender)
     password_hasher: providers.Factory[BcryptPasswordHasher] = providers.Factory(BcryptPasswordHasher)
     tokens: providers.Factory[JwtAccessTokenService] = providers.Factory(
         JwtAccessTokenService,
@@ -336,7 +344,16 @@ def build_container(settings: Settings, resources: AppResources) -> RuntimeConta
     notification_repository = container.notification_repository()
     notification_persistence = container.notification_persistence()
 
-    auth = container.auth()
+    email_sender = (
+        container.resend_email_sender()
+        if settings.RESEND_API_KEY.strip()
+        else container.log_email_sender()
+    )
+    auth = container.auth(
+        email_sender,
+        settings.PASSWORD_RESET_URL,
+        settings.PASSWORD_RESET_TTL_MINUTOS,
+    )
     empresas = container.empresas()
     notifications = NotificationUseCases(
         notification_repository,

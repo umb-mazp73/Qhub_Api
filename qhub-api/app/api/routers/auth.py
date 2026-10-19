@@ -1,8 +1,13 @@
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, Header
 
 from app.api.core.security import get_cuenta_opcional
 from app.application.errors import ApplicationError
-from app.domain.models import LoginCommand, RegisterAccount
+from app.domain.models import (
+    LoginCommand,
+    RegisterAccount,
+    RequestPasswordReset,
+    ResetPassword,
+)
 from app.application.use_cases.auth import AuthUseCases
 from app.domain.enums import PropietarioTipo
 from app.api.core.deps import (
@@ -10,7 +15,15 @@ from app.api.core.deps import (
     http_error,
     owner_from_claims,
 )
-from app.api.schemas.auth import LoginCrear, RegistroCrear, RegistroOut, TokenOut
+from app.api.schemas.auth import (
+    LoginCrear,
+    MensajeOut,
+    RecuperarCrear,
+    RegistroCrear,
+    RegistroOut,
+    RestablecerCrear,
+    TokenOut,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -93,3 +106,42 @@ async def crear_access_token(
     except ApplicationError as exc:
         raise http_error(exc) from exc
     return TokenOut(access_token=token.value, expires_in=token.expires_in_seconds)
+
+
+@router.post("/recuperar", response_model=MensajeOut)
+async def recuperar(
+    datos: RecuperarCrear,
+    background: BackgroundTasks,
+    casos: AuthUseCases = Depends(get_auth_use_cases),
+):
+    """Pide un enlace para restablecer la contraseña. Responde SIEMPRE el mismo texto
+    exista o no el correo (anti-enumeración); el envío corre después de responder."""
+    try:
+        job = await casos.request_password_reset(
+            RequestPasswordReset(email=str(datos.email))
+        )
+    except ApplicationError as exc:
+        raise http_error(exc) from exc
+    if job is not None:
+        background.add_task(casos.send_reset_email, job)
+    return MensajeOut(
+        detail="Si el correo está registrado, te enviamos un enlace para restablecer la contraseña."
+    )
+
+
+@router.post("/restablecer", response_model=MensajeOut)
+async def restablecer(
+    datos: RestablecerCrear,
+    casos: AuthUseCases = Depends(get_auth_use_cases),
+):
+    """Fija la contraseña nueva usando el token del enlace. 401 si el token no es válido
+    o expiró."""
+    try:
+        await casos.reset_password(
+            ResetPassword(token=datos.token, new_password=datos.password)
+        )
+    except ApplicationError as exc:
+        raise http_error(exc) from exc
+    return MensajeOut(
+        detail="Tu contraseña se actualizó. Ya puedes iniciar sesión con la nueva."
+    )

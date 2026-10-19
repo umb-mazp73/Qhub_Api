@@ -1,15 +1,31 @@
-from app.application.errors import Conflict, Forbidden, Unauthorized, UnprocessableInput
+import secrets
+from datetime import timedelta
+
+from app.application.errors import (
+    ApplicationError,
+    Conflict,
+    Forbidden,
+    Unauthorized,
+    UnprocessableInput,
+)
 from app.domain.models import (
     LoginCommand,
     RegisterAccount,
     RegistrationDraft,
     RegistrationResult,
+    RequestPasswordReset,
+    ResetPassword,
 )
 from app.domain.interfaces.accounts import AccountRepository
 from app.domain.interfaces.clock import Clock
+from app.domain.interfaces.email import EmailSender
 from app.domain.interfaces.security import ApiKeyCodec, AccessTokenService, PasswordHasher
 from app.domain.enums import PropietarioTipo
-from app.domain.value_objects import AccessToken, OwnerId
+from app.domain.value_objects import AccessToken, EmailJob, OwnerId
+from app.infrastructure.delivery.templates.password_reset_email import (
+    PASSWORD_RESET_SUBJECT,
+    password_reset_html,
+)
 
 
 _DUPLICATE = "El email o el nombre de usuario ya están registrados"
@@ -28,12 +44,18 @@ class AuthUseCases:
         api_keys: ApiKeyCodec,
         tokens: AccessTokenService,
         clock: Clock,
+        emails: EmailSender,
+        reset_url: str,
+        reset_ttl_minutos: int,
     ) -> None:
         self._accounts = accounts
         self._passwords = passwords
         self._api_keys = api_keys
         self._tokens = tokens
         self._clock = clock
+        self._emails = emails
+        self._reset_url = reset_url
+        self._reset_ttl_minutos = reset_ttl_minutos
         self._dummy_hash: str | None = None
 
     async def register(
@@ -116,3 +138,52 @@ class AuthUseCases:
                 "missing",
             )
         return self._tokens.issue(owner)
+
+    async def request_password_reset(
+        self, command: RequestPasswordReset
+    ) -> EmailJob | None:
+        """Anti-enumeración: misma respuesta genérica exista o no el email. El envío de
+        correo se devuelve como "trabajo diferido" y NO se ejecuta aquí; el router lo
+        encola en un BackgroundTask fuera del camino de la respuesta."""
+        email_norm = command.email.strip().lower()
+        target = await self._accounts.find_reset_target(email_norm)
+        if target is None:
+            # Gasta un verify bcrypt para equiparar el costo con la rama "existe". El valor
+            # es irrelevante para el resultado y el costo; se pasa un literal neutro para no
+            # sugerir que el email viaja a la verificación.
+            await self._burn_verification("reset")
+            return None
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = self._api_keys.digest(raw_token)
+        expira_en = self._clock.now_utc() + timedelta(minutes=self._reset_ttl_minutos)
+        await self._accounts.create_password_reset(target, token_hash, expira_en)
+        link = f"{self._reset_url.rstrip('/')}/qhub/restablecer?token={raw_token}"
+        return EmailJob(
+            to=target.email,
+            subject=PASSWORD_RESET_SUBJECT,
+            html=password_reset_html(link, self._reset_ttl_minutos),
+        )
+
+    async def send_reset_email(self, job: EmailJob) -> None:
+        """Ejecutado por el BackgroundTask del router, fuera del camino de la respuesta.
+        Consume cualquier ApplicationError (p. ej. PermanentDeliveryError): nunca llega al
+        cliente, que ya recibió la respuesta genérica."""
+        try:
+            await self._emails.send(to=job.to, subject=job.subject, html=job.html)
+        except ApplicationError:
+            pass
+
+    async def reset_password(self, command: ResetPassword) -> None:
+        token_hash = self._api_keys.digest(command.token)
+        now = self._clock.now_utc()
+        record = await self._accounts.find_valid_reset(token_hash, now)
+        if record is None:
+            raise Unauthorized("El enlace no es válido o ya expiró", "invalid")
+        new_hash = await self._passwords.hash_password(command.new_password)
+        await self._accounts.update_password_hash(
+            record.owner, record.account_id, new_hash
+        )
+        await self._accounts.mark_reset_used(record.id, now)
+        await self._accounts.invalidate_resets_for_account(
+            record.owner, record.account_id, now
+        )
