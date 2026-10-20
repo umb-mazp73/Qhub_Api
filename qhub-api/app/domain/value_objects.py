@@ -39,6 +39,7 @@ class LoginRecord:
     password_hash: str
     account_active: bool
     owner_active: bool
+    account_id: UUID | None = None   # PK real de la fila de login (para cambiar su contraseña)
 
 
 @dataclass(frozen=True, slots=True)

@@ -83,5 +83,11 @@ class RestablecerCrear(BaseModel):
     password: str = Field(min_length=8, max_length=72)
 
 
+class CambiarClaveCrear(BaseModel):
+    identificador: str = Field(min_length=1)
+    password_actual: str = Field(min_length=1, max_length=72)
+    password_nueva: str = Field(min_length=8, max_length=72)
+
+
 class MensajeOut(BaseModel):
     detail: str

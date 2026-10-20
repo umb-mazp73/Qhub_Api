@@ -9,6 +9,7 @@ from app.application.errors import (
     UnprocessableInput,
 )
 from app.domain.models import (
+    ChangePassword,
     LoginCommand,
     RegisterAccount,
     RegistrationDraft,
@@ -172,6 +173,22 @@ class AuthUseCases:
             await self._emails.send(to=job.to, subject=job.subject, html=job.html)
         except ApplicationError:
             pass
+
+    async def change_password(self, command: ChangePassword) -> None:
+        """Cambia la contraseña de una cuenta que se identifica con la actual (la web mantiene
+        una sola cuenta con la misma contraseña). Mismo error para cuenta inexistente y
+        contraseña incorrecta."""
+        record = await self._accounts.find_login(command.identificador.strip().lower())
+        if record is None or not record.account_active or record.account_id is None:
+            await self._burn_verification(command.current_password)
+            raise Unauthorized("Credenciales inválidas", "invalid")
+        if not await self._passwords.verify_password(command.current_password, record.password_hash):
+            raise Unauthorized("Credenciales inválidas", "invalid")
+        if not await self._accounts.owner_is_active(record.owner):
+            raise Unauthorized("Credenciales inválidas", "invalid")
+        new_hash = await self._passwords.hash_password(command.new_password)
+        await self._accounts.update_password_hash(record.owner, record.account_id, new_hash)
+        await self._accounts.invalidate_resets_for_account(record.owner, record.account_id, self._clock.now_utc())
 
     async def reset_password(self, command: ResetPassword) -> None:
         token_hash = self._api_keys.digest(command.token)

@@ -73,6 +73,13 @@ class RequestPasswordReset:
 
 
 @dataclass(frozen=True, slots=True)
+class ChangePassword:
+    identificador: str
+    current_password: str
+    new_password: str
+
+
+@dataclass(frozen=True, slots=True)
 class ResetPassword:
     token: str
     new_password: str

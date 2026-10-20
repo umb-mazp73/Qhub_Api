@@ -44,7 +44,7 @@ class SupabaseAccountRepository(AccountRepository):
         ):
             result = (
                 await self._client.table(table)
-                .select(f"{owner_column}, password_hash, activa")
+                .select(f"id, {owner_column}, password_hash, activa")
                 .or_(
                     f"email.ilike.{identifier_norm},nombre_usuario.ilike.{identifier_norm}"
                 )
@@ -58,6 +58,7 @@ class SupabaseAccountRepository(AccountRepository):
                     str(row["password_hash"]),
                     bool(row.get("activa", True)),
                     True,
+                    __import__("uuid").UUID(str(row["id"])),
                 )
         return None
 

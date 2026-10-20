@@ -11,7 +11,7 @@ NextHandler = Callable[[Request], Awaitable[Response]]
 
 # Estos endpoints se llaman SIN token, así que el límite por cuenta no los alcanza: se
 # frenan por IP (fuerza bruta de contraseñas, registros masivos).
-AUTH_PATHS = frozenset({"/auth/token", "/auth/registro"})
+AUTH_PATHS = frozenset({"/auth/token", "/auth/registro", "/auth/cambiar-clave"})
 
 
 def account_key_from_request(request: Request, validate_token) -> str | None:

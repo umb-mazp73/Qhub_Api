@@ -3,6 +3,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header
 from app.api.core.security import get_cuenta_opcional
 from app.application.errors import ApplicationError
 from app.domain.models import (
+    ChangePassword,
     LoginCommand,
     RegisterAccount,
     RequestPasswordReset,
@@ -16,6 +17,7 @@ from app.api.core.deps import (
     owner_from_claims,
 )
 from app.api.schemas.auth import (
+    CambiarClaveCrear,
     LoginCrear,
     MensajeOut,
     RecuperarCrear,
@@ -145,3 +147,22 @@ async def restablecer(
     return MensajeOut(
         detail="Tu contraseña se actualizó. Ya puedes iniciar sesión con la nueva."
     )
+
+
+@router.post("/cambiar-clave", response_model=MensajeOut)
+async def cambiar_clave(
+    datos: CambiarClaveCrear,
+    casos: AuthUseCases = Depends(get_auth_use_cases),
+):
+    """Cambia la contraseña identificándose con la actual. 401 si las credenciales no valen."""
+    try:
+        await casos.change_password(
+            ChangePassword(
+                identificador=datos.identificador,
+                current_password=datos.password_actual,
+                new_password=datos.password_nueva,
+            )
+        )
+    except ApplicationError as exc:
+        raise http_error(exc) from exc
+    return MensajeOut(detail="Tu contraseña se actualizó.")
