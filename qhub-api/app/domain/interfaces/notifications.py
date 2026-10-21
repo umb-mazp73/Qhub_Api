@@ -1,7 +1,7 @@
 from typing import Protocol
 from uuid import UUID
 
-from app.domain.models import NotificationDraft, Page, PersistNotification
+from app.domain.models import Page, PersistNotification
 from app.domain.entities import Notificacion
 from app.domain.value_objects import PersonIdentity
 
@@ -11,10 +11,6 @@ class NotificationPersistence(Protocol):
 
 
 class NotificationRepository(Protocol):
-    async def create_idempotent(
-        self, identity: PersonIdentity, draft: NotificationDraft
-    ) -> Notificacion: ...
-    async def get_by_key(self, identity: PersonIdentity, key: UUID) -> Notificacion | None: ...
     async def list(
         self, identity: PersonIdentity, page: Page
     ) -> tuple[Notificacion, ...]: ...

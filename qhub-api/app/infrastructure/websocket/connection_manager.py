@@ -45,13 +45,6 @@ class ConnectionManager:
         if not sockets:
             self._conexiones.pop(queue_id, None)
 
-    async def broadcast(self, queue_id: UUID, message: dict) -> None:
-        for websocket in list(self._conexiones.get(queue_id, ())):
-            try:
-                await websocket.send_json(message)
-            except Exception:
-                self.disconnect(queue_id, websocket)
-
     async def send_queue_event(
         self, queue_id: UUID, event: QueueEventEnvelope
     ) -> int:

@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from app.application.errors import PermanentMessageError, PersistenceFailure
-from app.domain.models import NotificationDraft, Page, PersistNotification
+from app.domain.models import Page, PersistNotification
 from app.domain.interfaces.notifications import (
     NotificationPersistence,
     NotificationRepository,
@@ -95,23 +95,6 @@ class SupabaseNotificationRepository(NotificationRepository):
             .eq("propietario_tipo", identity.owner.tipo.value)
             .eq("propietario_id", str(identity.owner.id))
         )
-
-    async def create_idempotent(
-        self, identity: PersonIdentity, draft: NotificationDraft
-    ) -> Notificacion:
-        return await self._persistence.persist(
-            PersistNotification(
-                identity=identity,
-                message=draft.mensaje,
-                turn_id=draft.turno_id,
-                idempotency_key=draft.clave_idempotencia,
-            )
-        )
-
-    async def get_by_key(
-        self, identity: PersonIdentity, key: UUID
-    ) -> Notificacion | None:
-        return await self._persistence._find_by_key(identity, key)
 
     async def list(
         self, identity: PersonIdentity, page: Page

@@ -173,18 +173,6 @@ class RabbitTopology:
             "ensure_notification_queue",
         )
 
-    async def ensure_notification_queue_on(
-        self, channel, exchange
-    ):
-        declared = await self._declare(
-            channel,
-            exchange,
-            self.notification_queue_name,
-            NOTIF_ROUTING_KEY,
-            "ensure_notification_queue",
-        )
-        return declared.queue
-
     async def declare_fanout(self, channel, exchange_name: str | None = None):
         """Exchange fanout de difusión entre instancias (por defecto, el de notificaciones)."""
         return await channel.declare_exchange(

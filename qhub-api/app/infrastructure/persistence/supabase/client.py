@@ -45,10 +45,6 @@ class SupabaseClientOwner:
         return self._state
 
     @property
-    def owns_client(self) -> bool:
-        return self._owns_client
-
-    @property
     def client(self) -> AsyncClient | None:
         return self._client
 

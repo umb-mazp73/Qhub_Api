@@ -172,13 +172,6 @@ class CreateTurn:
 
 
 @dataclass(frozen=True, slots=True)
-class NotificationDraft:
-    mensaje: str
-    turno_id: UUID | None
-    clave_idempotencia: UUID
-
-
-@dataclass(frozen=True, slots=True)
 class PersistNotification:
     identity: PersonIdentity
     message: str
