@@ -36,7 +36,7 @@ async def ws_turnos(
         return
     container = websocket.app.state.container
     try:
-        user = await resolver_token_websocket(token)
+        user = await resolver_token_websocket(token, container)
         await container.queues.get(context_from_claims(user), cola_id)
     except Exception:
         await websocket.close(code=4401)
@@ -72,7 +72,7 @@ async def ws_notificaciones(
         return
     container = websocket.app.state.container
     try:
-        user = await resolver_token_websocket(token)
+        user = await resolver_token_websocket(token, container)
         identity = PersonIdentity(owner_from_claims(user), user["usuario_id"])
     except Exception:
         await websocket.close(code=4401)

@@ -91,3 +91,22 @@ class CambiarClaveCrear(BaseModel):
 
 class MensajeOut(BaseModel):
     detail: str
+
+
+class ApiKeyGenerar(BaseModel):
+    """Confirmación para emitir o rotar la api key: la misma contraseña de la cuenta."""
+
+    identificador: str = Field(min_length=1, description="email o nombre_usuario")
+    password: str = Field(min_length=1)
+
+
+class ApiKeyEstado(BaseModel):
+    activa: bool
+    creada_en: datetime | None = None
+
+
+class ApiKeyNueva(BaseModel):
+    """La única vez que se ve la llave en claro: guardarla ahora, no se puede volver a consultar."""
+
+    api_key: str
+    creada_en: datetime

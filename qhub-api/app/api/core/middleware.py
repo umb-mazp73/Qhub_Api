@@ -1,3 +1,4 @@
+import hashlib
 from collections.abc import Awaitable, Callable
 
 from fastapi import HTTPException
@@ -11,10 +12,27 @@ NextHandler = Callable[[Request], Awaitable[Response]]
 
 # Estos endpoints se llaman SIN token, así que el límite por cuenta no los alcanza: se
 # frenan por IP (fuerza bruta de contraseñas, registros masivos).
-AUTH_PATHS = frozenset({"/auth/token", "/auth/registro", "/auth/cambiar-clave"})
+AUTH_PATHS = frozenset({"/auth/token", "/auth/registro", "/auth/cambiar-clave", "/auth/api-key"})
+
+
+def _api_key_of(request: Request) -> str | None:
+    """La api key de la petición (X-Api-Key, o un Bearer que no es JWT), si la trae."""
+    key = request.headers.get("x-api-key")
+    if key:
+        return key
+    authorization = request.headers.get("authorization")
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+        if token and token.count(".") != 2:
+            return token
+    return None
 
 
 def account_key_from_request(request: Request, validate_token) -> str | None:
+    api_key = _api_key_of(request)
+    if api_key is not None:
+        # sin consultar la base: el cupo se lleva por la huella de la llave
+        return f"apikey:{hashlib.sha256(api_key.encode()).hexdigest()[:24]}"
     authorization = request.headers.get("authorization")
     if not authorization or not authorization.startswith("Bearer "):
         return None
@@ -52,6 +70,12 @@ def create_rate_limit_middleware(
                 )
 
         limit = _value(requests_per_minute)
+        if _api_key_of(request) is not None:
+            # cada llave distinta tiene su propio cupo; este tope por dirección evita que se
+            # sondeen llaves al azar (cada una costaría una consulta a la base)
+            client = request.client.host if request.client else "desconocido"
+            if not limiter.allow(f"apikey-ip:{client}", limit * 5):
+                return _too_many("Demasiadas peticiones con api key desde esta dirección")
         account_key = identity_resolver(request)
         if account_key is not None and not limiter.allow(account_key, limit):
             return _too_many(

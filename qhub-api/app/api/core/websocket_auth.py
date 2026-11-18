@@ -1,11 +1,12 @@
 from fastapi import HTTPException
 
+from app.api.core.security import cuenta_por_api_key, es_jwt
 from app.config.config import settings
 from app.application.errors import CryptoFailure, Unauthorized
 from app.infrastructure.security.jwt_tokens import verify_token
 
 
-async def resolver_token_websocket(token: str) -> dict:
+async def resolver_token_websocket(token: str, container=None) -> dict:
     partes = token.split(":", 2)
     if len(partes) < 2:
         raise HTTPException(
@@ -14,9 +15,13 @@ async def resolver_token_websocket(token: str) -> dict:
     access_token, usuario_id = partes[0], partes[1]
     rol = partes[2] if len(partes) > 2 else None
     try:
-        propietario_tipo, propietario_id = verify_token(
-            settings.JWT_SECRET_KEY, access_token
-        )
+        if container is not None and not es_jwt(access_token):
+            # api key directa (no vence): se resuelve contra la base como en HTTP
+            propietario_tipo, propietario_id = await cuenta_por_api_key(container, access_token)
+        else:
+            propietario_tipo, propietario_id = verify_token(
+                settings.JWT_SECRET_KEY, access_token
+            )
     except CryptoFailure as exc:
         raise HTTPException(500, "JWT_SECRET_KEY no está configurada") from exc
     except Unauthorized as exc:

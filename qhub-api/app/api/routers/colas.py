@@ -80,7 +80,7 @@ async def limite_colas(
     """Cuántas colas puede tener esta cuenta y cuántas le quedan.
 
     Existe para que el cliente no tenga que descubrir su tope chocándose con un 409:
-    los límites dependen del tipo de cuenta (empresa 10, usuario 5) y no son algo que
+    los límites dependen del tipo de cuenta (empresa 6, usuario 3) y no son algo que
     quien integra deba adivinar."""
     return ColasLimite.from_domain(await casos.limit(context))
 

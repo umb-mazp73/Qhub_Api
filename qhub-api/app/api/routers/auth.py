@@ -1,6 +1,6 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Response
 
-from app.api.core.security import get_cuenta_opcional
+from app.api.core.security import get_cuenta_opcional, get_cuenta_requerida
 from app.application.errors import ApplicationError
 from app.domain.models import (
     ChangePassword,
@@ -17,6 +17,9 @@ from app.api.core.deps import (
     owner_from_claims,
 )
 from app.api.schemas.auth import (
+    ApiKeyEstado,
+    ApiKeyGenerar,
+    ApiKeyNueva,
     CambiarClaveCrear,
     LoginCrear,
     MensajeOut,
@@ -95,9 +98,9 @@ async def crear_access_token(
          (POST /empresas), o para cualquier cuenta a la que se le haya emitido una key.
 
     En ambos casos se devuelve el mismo access_token (JWT propio, corta duración) para
-    usar en Authorization: Bearer en el resto de los endpoints. Este endpoint es el
-    ÚNICO lugar donde se acepta la api key o la password crudas — get_current_user()
-    las rechaza en cualquier otro endpoint."""
+    usar en Authorization: Bearer. Es OPCIONAL: los endpoints de negocio también aceptan
+    la api key directa (X-Api-Key o Authorization: Bearer <api key>), así que quien integra
+    puede saltarse este paso. La password cruda solo se acepta aquí."""
     command = LoginCommand(
         identificador=datos.identificador if datos else None,
         password=datos.password if datos else None,
@@ -108,6 +111,48 @@ async def crear_access_token(
     except ApplicationError as exc:
         raise http_error(exc) from exc
     return TokenOut(access_token=token.value, expires_in=token.expires_in_seconds)
+
+
+@router.get("/api-key", response_model=ApiKeyEstado)
+async def estado_api_key(
+    cuenta: dict = Depends(get_cuenta_requerida),
+    casos: AuthUseCases = Depends(get_auth_use_cases),
+):
+    """Si la cuenta tiene una api key activa y desde cuándo. Nunca devuelve la llave."""
+    info = await casos.api_key_info(owner_from_claims(cuenta))
+    return ApiKeyEstado(activa=info.activa, creada_en=info.creada_en)
+
+
+@router.post("/api-key", response_model=ApiKeyNueva, status_code=201)
+async def emitir_api_key(
+    datos: ApiKeyGenerar,
+    cuenta: dict = Depends(get_cuenta_requerida),
+    casos: AuthUseCases = Depends(get_auth_use_cases),
+):
+    """Emite la api key permanente de la cuenta (o la rota, si ya tenía una).
+
+    La api key NO vence: se cambia por un access_token con POST /auth/token (header
+    X-Api-Key) las veces que haga falta, y deja de valer solo cuando se rota o se revoca.
+    Se muestra una única vez en esta respuesta. Requiere el access_token de la cuenta y
+    confirmar la contraseña. Los access_token ya emitidos siguen valiendo hasta que
+    expiren (la rotación los respeta: duran minutos, no son la credencial permanente)."""
+    try:
+        issued = await casos.issue_api_key(
+            owner_from_claims(cuenta), datos.identificador, datos.password
+        )
+    except ApplicationError as exc:
+        raise http_error(exc) from exc
+    return ApiKeyNueva(api_key=issued.api_key, creada_en=issued.creada_en)
+
+
+@router.delete("/api-key", status_code=204)
+async def revocar_api_key(
+    cuenta: dict = Depends(get_cuenta_requerida),
+    casos: AuthUseCases = Depends(get_auth_use_cases),
+):
+    """Revoca la api key de la cuenta: deja de servir para POST /auth/token."""
+    await casos.revoke_api_key(owner_from_claims(cuenta))
+    return Response(status_code=204)
 
 
 @router.post("/recuperar", response_model=MensajeOut)

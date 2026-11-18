@@ -61,6 +61,20 @@ class RegistrationResult:
 
 
 @dataclass(frozen=True, slots=True)
+class ApiKeyInfo:
+    """Estado de la api key de una cuenta. Nunca incluye la llave: solo se ve al emitirla."""
+
+    activa: bool
+    creada_en: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class ApiKeyIssued:
+    api_key: str
+    creada_en: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class LoginCommand:
     identificador: str | None
     password: str | None

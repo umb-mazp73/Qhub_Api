@@ -5,7 +5,7 @@ import logging
 
 from app.application.errors import PersistenceFailure
 from app.domain.email_lookup import email_query_for
-from app.domain.models import RegistrationDraft, RegistrationResult
+from app.domain.models import ApiKeyInfo, RegistrationDraft, RegistrationResult
 from app.domain.interfaces.accounts import AccountRepository
 from app.domain.enums import LIMITE_COLAS_POR_TIPO, PropietarioTipo
 from app.domain.value_objects import (
@@ -99,6 +99,42 @@ class SupabaseAccountRepository(AccountRepository):
             PropietarioTipo(row["propietario_tipo"]),
             __import__("uuid").UUID(str(row["propietario_id"])),
         )
+
+    async def active_api_key_info(self, owner: OwnerId) -> ApiKeyInfo:
+        result = (
+            await self._client.table("api_keys")
+            .select("*")
+            .eq("propietario_tipo", owner.tipo.value)
+            .eq("propietario_id", str(owner.id))
+            .eq("activa", True)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            return ApiKeyInfo(activa=False, creada_en=None)
+        raw = result.data[0].get("creada_en")
+        try:
+            creada_en = datetime.fromisoformat(str(raw).replace("Z", "+00:00")) if raw else None
+        except ValueError:
+            creada_en = None
+        return ApiKeyInfo(activa=True, creada_en=creada_en)
+
+    async def revoke_api_keys(self, owner: OwnerId, at: datetime) -> None:
+        await self._client.table("api_keys").update(
+            {"activa": False, "revocada_en": at.isoformat()}
+        ).eq("propietario_tipo", owner.tipo.value).eq(
+            "propietario_id", str(owner.id)
+        ).eq("activa", True).execute()
+
+    async def insert_api_key_digest(self, owner: OwnerId, digest: str) -> None:
+        await self._client.table("api_keys").insert(
+            {
+                "propietario_tipo": owner.tipo.value,
+                "propietario_id": str(owner.id),
+                "api_key_hash": digest,
+                "activa": True,
+            }
+        ).execute()
 
     async def owner_is_active(self, owner: OwnerId) -> bool:
         table = "empresas" if owner.tipo is PropietarioTipo.EMPRESA else "usuarios"

@@ -1,4 +1,5 @@
 import secrets
+import time
 from datetime import timedelta
 
 from app.application.errors import (
@@ -9,6 +10,8 @@ from app.application.errors import (
     UnprocessableInput,
 )
 from app.domain.models import (
+    ApiKeyInfo,
+    ApiKeyIssued,
     ChangePassword,
     LoginCommand,
     RegisterAccount,
@@ -29,6 +32,7 @@ from app.infrastructure.delivery.templates.password_reset_email import (
 )
 
 
+_KEY_CACHE_SECONDS = 10.0
 _DUPLICATE = "El email o el nombre de usuario ya están registrados"
 _USER_OWNER_FORBIDDEN = (
     "Estás usando el token de una cuenta de tipo usuario: una cuenta individual "
@@ -58,6 +62,7 @@ class AuthUseCases:
         self._reset_url = reset_url
         self._reset_ttl_minutos = reset_ttl_minutos
         self._dummy_hash: str | None = None
+        self._key_cache: dict[str, tuple[OwnerId, float]] = {}
 
     async def register(
         self, command: RegisterAccount, current_owner: OwnerId | None
@@ -95,11 +100,22 @@ class AuthUseCases:
         return await self._accounts.register(draft)
 
     async def authenticate_api_key(self, api_key: str) -> OwnerId | None:
-        owner = await self._accounts.find_owner_by_api_key_digest(
-            self._api_keys.digest(api_key)
-        )
+        """Cada petición con api key pasa por aquí: se recuerda unos segundos la llave ya
+        validada para no consultar la base dos veces por request. Rotar o revocar vacía el
+        recuerdo de este proceso; en otros procesos el cambio se nota en, como mucho,
+        _KEY_CACHE_SECONDS."""
+        digest = self._api_keys.digest(api_key)
+        cached = self._key_cache.get(digest)
+        now = time.monotonic()
+        if cached is not None and cached[1] > now:
+            return cached[0]
+        owner = await self._accounts.find_owner_by_api_key_digest(digest)
         if owner is None or not await self._accounts.owner_is_active(owner):
+            self._key_cache.pop(digest, None)
             return None
+        if len(self._key_cache) > 2048:
+            self._key_cache.clear()
+        self._key_cache[digest] = (owner, now + _KEY_CACHE_SECONDS)
         return owner
 
     async def _burn_verification(self, password: str) -> None:
@@ -139,6 +155,34 @@ class AuthUseCases:
                 "missing",
             )
         return self._tokens.issue(owner)
+
+    async def api_key_info(self, owner: OwnerId) -> ApiKeyInfo:
+        return await self._accounts.active_api_key_info(owner)
+
+    async def issue_api_key(
+        self, owner: OwnerId, identifier: str, password: str
+    ) -> ApiKeyIssued:
+        """Emite (o rota) la api key permanente de la cuenta. La llave no vence: vale
+        hasta que se rote o se revoque. Es sensible (equivale a una contraseña que no
+        caduca), así que además del token exige confirmar la contraseña, y que esa
+        contraseña sea de la misma cuenta del token: un access_token robado, que dura
+        una hora, no alcanza para fabricar una credencial permanente.
+
+        Primero se revoca y después se emite; al revés, la revocación en bloque
+        desactivaría también la llave recién creada."""
+        confirmed = await self.authenticate_credentials(identifier, password)
+        if confirmed is None or confirmed != owner:
+            raise Unauthorized("Credenciales inválidas", "invalid")
+        now = self._clock.now_utc()
+        api_key = self._api_keys.generate()
+        await self._accounts.revoke_api_keys(owner, now)
+        self._key_cache.clear()
+        await self._accounts.insert_api_key_digest(owner, self._api_keys.digest(api_key))
+        return ApiKeyIssued(api_key=api_key, creada_en=now)
+
+    async def revoke_api_key(self, owner: OwnerId) -> None:
+        await self._accounts.revoke_api_keys(owner, self._clock.now_utc())
+        self._key_cache.clear()
 
     async def request_password_reset(
         self, command: RequestPasswordReset
