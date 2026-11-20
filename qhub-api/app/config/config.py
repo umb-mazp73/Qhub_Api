@@ -33,6 +33,9 @@ class Settings(EnvConfig):
     NOTIFICACIONES_MAX_INTENTOS: int = 5
     NOTIFICACIONES_REINTENTO_SEGUNDOS: int = 5
     NOTIFICACIONES_CANALES: str = "websocket,log"
+    # Aviso inmediato a la función de Supabase que manda push y correo al cliente. Si ambos están definidos, el canal se activa solo.
+    AVISOS_WEBHOOK_URL: str = ""
+    AVISOS_WEBHOOK_SECRET: str = ""
 
     TAREAS_INTERVALO_SEGUNDOS: int = 60
     NO_SHOW_GRACIA_MINUTOS: int = 15

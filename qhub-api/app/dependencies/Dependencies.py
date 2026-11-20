@@ -19,6 +19,7 @@ from app.infrastructure.clock import SystemClock, UuidGenerator
 from app.infrastructure.messaging.rabbitmq.connection import RabbitConnectionManager
 from app.infrastructure.delivery.email_channel import EmailNotificationChannel
 from app.infrastructure.delivery.log_channel import LogNotificationChannel
+from app.infrastructure.delivery.webhook_channel import WebhookNotificationChannel
 from app.infrastructure.delivery.log_email_sender import LogEmailSender
 from app.infrastructure.delivery.brevo_email_sender import BrevoEmailSender
 from app.infrastructure.messaging.rabbitmq.event_worker import EventWorker, SubscribingQueueProvisioner
@@ -108,6 +109,12 @@ def _select_channels(settings: Settings, live_delivery, email_sender, accounts) 
                 )
         else:
             logger.warning("Canal de notificación desconocido: %r", name)
+    # Con URL y secreto definidos, el aviso inmediato (push y correo del cliente) se activa solo.
+    if settings.AVISOS_WEBHOOK_URL.strip() and settings.AVISOS_WEBHOOK_SECRET.strip() and "webhook" not in seen:
+        channels.append(
+            WebhookNotificationChannel(settings.AVISOS_WEBHOOK_URL.strip(), settings.AVISOS_WEBHOOK_SECRET.strip())
+        )
+        seen.add("webhook")
     return channels, seen
 
 
